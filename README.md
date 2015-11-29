@@ -107,7 +107,7 @@ return sohm.model("User", {
 
 Suppose the above model is stored in `user.lua` in the package path. We can now use it:
 
-```
+```lua
 local user = require("user")
 
 local data = {
@@ -126,6 +126,7 @@ If you are familiar with ohm, you will recognize several differences:
 2. In addition to normal attributes, we also support serial attributes that are set in a CAS way: suppose you fetch a model from database, then someone else modifies the same model, you will not be able to save the model unless you fetch it from the database again. This can be used to guard certain critical data.
 3. The core sohm has no index support. You can only query a model by ID here, later we will see that index is supported via a plugin, i.e., index will only be available when you explicitly say so.
 4. Sohm has no support for multiple unique indices. The only unique index available is the model ID. As a result, model ID can be any string, it is not necessarily the fact that model ID is a number.
+5. Sohm preserves types: if an attribute is a number, it will always be a number when we save it and refetch the model again. You can store arrays or maps in the attributes as well: as long as MessagePack can serialize/deserialize the data, they will be preserved. The only exception here is ID, which is always treated as a string.
 
 Notice the CAS option is off by default: if you model does not use serial attributes, or you are sure the serial attributes are not modified, you can use a fast path here:
 
@@ -142,3 +143,315 @@ user:save(db, data, {expire = 3600})
 
 Sohm is designed with performance in mind, you will not pay the cost if you are not using any additional feature. One example here is: if we are not using indices, CAS or expiration, the core sohm can save a model via a single Redis `HMSET` command. This is the fastest path I can think of right now.
 
+You can fetch a model from Redis via ID:
+
+```lua
+local data, err = user:fetch(db, "1")
+```
+
+You can delete an existing model either via ID or model data:
+
+```lua
+local data, err = user:fetch(db, "1")
+user:delete(db, data)
+
+-- Or you can also use ID directly
+user:delete(db, "1")
+```
+
+Counter is also working in sohm, suppose the user model is changed to this:
+
+```lua
+local sohm = require "sohm"
+local msgpack = require "messagepack"
+
+return sohm.model("User", {
+  attributes = {
+    "lname",
+    "fname"
+  },
+
+  serial_attributes = {
+    "email"
+  },
+
+  counters = {
+    "votes"
+  }
+}, msgpack)
+```
+
+You can read, increase or decrease a counter:
+
+```
+local data = user:fetch(db, "1")
+local votes = user:votes(db, data)
+
+-- Or you can use ID as well
+votes = user:votes(db, "1")
+
+-- Increase a vote:
+user:incr(db, "1", "votes", 2)
+
+-- And decrease one:
+user:incr(db, data, "votes", 3)
+```
+
+# Set & List
+
+`set` and `list` are also supported in sohm:
+
+```lua
+local address_model = sohm.model("Address", {
+  attributes = {
+    "line",
+    "city",
+    "zipcode"
+  }
+}, msgpack)
+
+local user_model sohm.model("User", {
+  attributes = {
+    "lname",
+    "fname"
+  },
+
+  serial_attributes = {
+    "email"
+  },
+
+  sets = {
+    "address_set"
+  },
+
+  lists = {
+    "address_list"
+  }
+}, msgpack)
+
+-- For simplicity, let's assume we have a few addresses saved to the database:
+local address1 = address_model:fetch(db, "1")
+local address2 = address_model:fetch(db, "2")
+
+-- Add them to set
+local set = user_model:address_set(db, address_model)
+set:add(db, "1")
+set:add(db, address2)
+
+-- Delete from set
+set:delete(db, address1)
+
+-- Test existence
+if set:exists(db, "2") then print("Address 2 exists in set!") end
+
+-- Fetch from set
+local address_to_fetch = set:fetch(db, "1")
+
+-- Get IDs
+local ids = set:ids(db)
+
+-- Get Size
+local size = set:size(db)
+
+-- Get an iterator of set items
+for addr in set:iter(db) do
+  -- Do something with addr
+end
+
+-- List works in a similar way
+local list = user_model:address_list(db, address_model)
+
+list:push(db, "1")
+list:unshift(db, address2)
+
+local first_item = list:first(db)
+local last_item = list:last(db)
+
+for addr in list:range(db, 0, -1) do
+  -- Do something with addr
+end
+
+-- Remove the first one
+list:shift(db)
+
+-- Remove the last one
+list:pop(db)
+
+-- Delete an item from the whole list
+list:delete(db, "3")
+```
+
+# Plugins
+
+Core sohm only includes limited features that will not affect performance. We also have a few plugins you can use according to your needs:
+
+## AutoId
+
+In case you don't care what ID is used for the model, you can include this plugin to automatically generate a numeric ID for you, just like what ohm does:
+
+```lua
+local sohm_auto_id = require("sohm.auto_id")
+local address_model = sohm.model("Address", {
+  attributes = {
+    "line",
+    "city",
+    "zipcode"
+  },
+  plugins = {
+    sohm_auto_id
+  }
+}, msgpack)
+
+local address_data = { line = "Main Street 1", city = "New York",
+                       zipcode = 10001 }
+-- You can save the data here without an ID
+address_model:save(db, address_data)
+```
+
+## ToStr
+
+This plugin can print a nice representation of the model:
+
+```lua
+local sohm_tostr = require("sohm.tostr")
+local address_model = sohm.model("Address", {
+  attributes = {
+    "line",
+    "city",
+    "zipcode"
+  },
+  plugins = {
+    sohm_tostr
+  }
+}, msgpack)
+
+local data = address_model:fetch(db, "1")
+address_model:tostr(db, data)
+```
+
+Notice we didn't use `__tostring` on purpose, since `data` is just a table, we don't want to override table's `__tostring` which might break other code.
+
+## Index
+
+Index is provided here as a plugin:
+
+```lua
+local sohm_auto_id = require("sohm.auto_id")
+local sohm_index = require("sohm.index")
+local address_model = sohm.model("Address", {
+  attributes = {
+    "line",
+    "city",
+    "zipcode"
+  },
+  indices = {
+    "zipcode"
+  },
+  plugins = {
+    sohm_auto_id,
+    sohm_index
+  }
+}, msgpack)
+
+local address_data = { line = "Main Street 1", city = "New York",
+                       zipcode = 10001 }
+address_model:save(db, address_data)
+
+-- Use refresh to manually update indices
+address_model:refresh(db, address_data)
+
+-- Now you can query on the index
+local set = address_model:find(db, "zipcode", 10001)
+
+-- set here is just a normal set as shown above, the only difference is
+-- that this set is not mutable
+for addr in set:iter(db) do
+  -- Use addr
+end
+```
+
+When index is enabled, `reference` and `collection` works as well:
+
+```lua
+local sohm_auto_id = require("sohm.auto_id")
+local sohm_index = require("sohm.index")
+local address_model = sohm.model("Address", {
+  attributes = {
+    "line",
+    "city",
+    "zipcode"
+  },
+
+  references = {
+    "user_id"
+  },
+
+  indices = {
+    "zipcode"
+  },
+
+  plugins = {
+    sohm_auto_id,
+    sohm_index
+  }
+}, msgpack)
+
+local user_model sohm.model("User", {
+  attributes = {
+    "lname",
+    "fname"
+  },
+
+  serial_attributes = {
+    "email"
+  },
+
+  collections = {
+    "addresses"
+  },
+
+  plugins = {
+    sohm_auto_id,
+    sohm_index
+  }
+}, msgpack)
+
+local address_data = { line = "Main Street 1", city = "New York",
+                       zipcode = 10001, user_id = "1" }
+address_model:save(db, address_data)
+
+local user = address_model:user(db, address_data, user_model)
+
+for addr in user_model:addresses(db, user, address_model):iter(db) do
+  -- Use addr
+end
+```
+
+## IndexAll
+
+When index is enabled, another plugin `IndexAll` can give you the original `all` in Sohm:
+
+```lua
+local sohm_auto_id = require("sohm.auto_id")
+local sohm_index = require("sohm.index")
+local sohm_index_all = require("sohm.index_all")
+local address_model = sohm.model("Address", {
+  attributes = {
+    "line",
+    "city",
+    "zipcode"
+  },
+  indices = {
+    "zipcode"
+  },
+  plugins = {
+    sohm_auto_id,
+    sohm_index,
+    sohm_index_all
+  }
+}, msgpack)
+
+for addr in address_model:all(db) do
+  -- Use addr here
+end
+```
