@@ -23,10 +23,16 @@ end
 ]====]
 local save_script_sha = "02c49a51975e6c23a3f8a355af4e50f8df155bde"
 
-local pack_attributes = function(msgpack, attributes, data)
+local _pack_attributes = function(msgpack, model, attributes, data, db)
   local res = {}
   for _, att in ipairs(attributes) do
-    local val = data[att]
+    local val
+    local f = model.attribute_functions[att]
+    if type(f) == "function" then
+      val = f(model, data, db)
+    else
+      val = data[att]
+    end
     if val then
       res[att] = val
     end
@@ -41,7 +47,7 @@ local pack_attributes = function(msgpack, attributes, data)
   end
 end
 
-local unpack_attributes = function(msgpack, attributes, str, data)
+local _unpack_attributes = function(msgpack, attributes, str, data)
   if not str then return end
   local hash = msgpack.unpack(str)
   for _, att in ipairs(attributes) do
@@ -54,8 +60,8 @@ local _assemble = function(self, id, values)
   if #values == 0 then return nil end
   local hash = util.zip(values)
   local data = { id = id, _cas = hash._cas }
-  unpack_attributes(self.msgpack, self.attributes, hash._ndata, data)
-  unpack_attributes(self.msgpack, self.serial_attributes, hash._sdata, data)
+  _unpack_attributes(self.msgpack, self.attributes, hash._ndata, data)
+  _unpack_attributes(self.msgpack, self.serial_attributes, hash._sdata, data)
   return data
 end
 
@@ -66,16 +72,23 @@ end
 
 local save = function(self, db, data, opts)
   opts = opts or {}
-  local id = data.id
+  local id
+  local f = self.attribute_functions["id"]
+  if type(f) == "function" then
+    id = f(self, data, db)
+  else
+    id = data.id
+  end
   if not id then
     return nil, "missing_id"
   end
   local key = self.name .. ":" .. id
-  local ndata = pack_attributes(self.msgpack, self.attributes, data)
+  local ndata = _pack_attributes(self.msgpack, self, self.attributes, data, db)
   local expire = tonumber(opts.expire) or 0
   local res, err
   if opts.cas then
-    local sdata = pack_attributes(self.msgpack, self.serial_attributes, data)
+    local sdata = _pack_attributes(self.msgpack, self, self.serial_attributes,
+                                  data, db)
     local cas = data._cas or ""
     res, err = util.script(db, save_script, save_script_sha,
                            1, key, sdata, cas, ndata, expire)
@@ -124,6 +137,7 @@ local model = function(name, schema, msgpack)
   self.attributes = schema.attributes or {}
   self.serial_attributes = schema.serial_attributes or {}
   self.msgpack = msgpack
+  self.attribute_functions = {}
   self._tracked = { "_counters" }
 
   local methods = {
