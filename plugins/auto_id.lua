@@ -3,7 +3,9 @@ local extract_id = function(model, data, db)
   if id then
     return id
   else
-    return db:call("INCR", model.name .. "_id")
+    id = db:call("INCR", model.name .. "_id")
+    data.id = id
+    return id
   end
 end
 
