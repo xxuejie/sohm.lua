@@ -183,7 +183,7 @@ return sohm.model("User", {
 
 You can read, increase or decrease a counter:
 
-```
+```lua
 local data = user:fetch(db, "1")
 local votes = user:votes(db, data)
 
