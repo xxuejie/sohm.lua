@@ -94,7 +94,7 @@ We can define sohm models like this:
 
 ```lua
 local sohm = require "sohm"
-local msgpack = require "messagepack"
+local msgpack = require "MessagePack"
 
 return sohm.model("User", {
   attributes = {
@@ -166,7 +166,7 @@ Counter is also working in sohm, suppose the user model is changed to this:
 
 ```lua
 local sohm = require "sohm"
-local msgpack = require "messagepack"
+local msgpack = require "MessagePack"
 
 return sohm.model("User", {
   attributes = {
