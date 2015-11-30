@@ -48,14 +48,17 @@ You should also have [lua-MessagePack](https://github.com/fperrad/lua-MessagePac
 
 Now you can grab sohm.lua code at <https://github.com/xxuejie/sohm.lua>. Suppose the code is stored at /foo/bar/sohm, you need to make sure Lua package path contains `/foo/bar/sohm/?.lua` in order to make sohm work.
 
-One tip I'm personally now using, is that you can group your Lua libraries in the following path:
+One tip I'm personally now using, is that you can group your Lua libraries in the following path(my recommended way is to use git submodules):
 
 ```
 /foo/bar/libs/sohm
 /foo/bar/libs/redic
+/foo/bar/libs/MessagePack
 ```
 
-All you need to do then, is to add `/foo/bar/libs/?.lua;/foo/bar/libs/?/?.lua` to the package path, and everything will be working just fine.
+All you need to do then, is to add `/foo/bar/libs/?.lua;/foo/bar/libs/?/?.lua;/foo/bar/libs/?/src/?.lua` to the package path, and everything will be working just fine.
+
+Notice `/foo/bar/libs/?/src/?.lua` is for dealing with the folder structure of [lua-MessagePack](https://github.com/fperrad/lua-MessagePack/). If you clone it to `/foo/bar/libs/MessagePack`, the lua file to require will be at `/foo/bar/libs/MessagePack/src/MessagePack.lua`, which is perfectly covered by `/foo/bar/libs/?/src/?.lua`.
 
 # Connection to Redis
 
