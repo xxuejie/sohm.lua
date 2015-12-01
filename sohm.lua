@@ -131,6 +131,11 @@ local decr = function(self, db, id_or_data, counter, count)
   return self:incr(db, id_or_data, counter, - count)
 end
 
+local key = function(self, db, id_or_data)
+  local id = util.ensure_id(id_or_data)
+  return self.name .. ":" .. id
+end
+
 local model = function(name, schema, msgpack)
   local self = {}
   self.name = name
@@ -146,7 +151,8 @@ local model = function(name, schema, msgpack)
     fetch = fetch,
     save = save,
     incr = incr,
-    decr = decr
+    decr = decr,
+    key = key
   }
   for _, plugin in ipairs(schema.plugins or {}) do
     local dynamic_methods = nil
