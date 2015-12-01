@@ -109,6 +109,14 @@ local save = function(self, db, data, opts)
   return data, err
 end
 
+local update = function(self, db, id_or_data, attrs, opts)
+  local data = util.ensure_data(self, db, id_or_data)
+  for k, v in pairs(attrs) do
+    data[k] = v
+  end
+  return self:save(db, data, opts)
+end
+
 local delete = function(self, db, id_or_data)
   local id = util.ensure_id(id_or_data)
   local key = self.name .. ":" .. id
@@ -152,7 +160,8 @@ local model = function(name, schema, msgpack)
     save = save,
     incr = incr,
     decr = decr,
-    key = key
+    key = key,
+    update = update
   }
   for _, plugin in ipairs(schema.plugins or {}) do
     local dynamic_methods = nil
