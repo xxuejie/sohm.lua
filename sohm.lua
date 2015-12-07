@@ -209,7 +209,7 @@ local model = function(name, schema, msgpack)
       return model:find(db, reference, id)
     end
   end
-  for name, method in ipairs(schema.methods or {}) do
+  for name, method in pairs(schema.methods or {}) do
     methods[name] = method
   end
 
