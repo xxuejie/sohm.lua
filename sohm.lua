@@ -109,8 +109,7 @@ local save = function(self, db, data, opts)
   return data, err
 end
 
-local update = function(self, db, id_or_data, attrs, opts)
-  local data = util.ensure_data(self, db, id_or_data)
+local update = function(self, db, data, attrs, opts)
   for k, v in pairs(attrs) do
     data[k] = v
   end
