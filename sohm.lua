@@ -33,7 +33,7 @@ local _pack_attributes = function(msgpack, model, attributes, data, db)
     else
       val = data[att]
     end
-    if val then
+    if val ~= nil then
       res[att] = val
     end
   end
@@ -52,7 +52,7 @@ local _unpack_attributes = function(msgpack, attributes, str, data)
   local hash = msgpack.unpack(str)
   for _, att in ipairs(attributes) do
     local val = hash[att]
-    if val then data[att] = val end
+    if val ~= nil then data[att] = val end
   end
 end
 
