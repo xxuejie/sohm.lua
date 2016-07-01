@@ -6,7 +6,7 @@ local _batch_fetch = function(db, ids, namespace, model)
     local key = namespace .. ":" .. id
     db:queue("HGETALL", key)
   end
-  results, err = db:commit()
+  local results, err = db:commit()
   if err then
     return nil, err
   end
